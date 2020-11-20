@@ -105,6 +105,8 @@ This data is collected from a longitudinal study with control and experimental s
 
 ### Import and tidy data 
 
+Import individual data files, combine into data frame, add sample ID and experimental/control arm columns.
+
 ```{r}
 
 con_urls <- str_c("./data/con_0", 01:9, ".csv", sep = "")
@@ -117,5 +119,27 @@ exp_df <- bind_rows(map(exp_urls, read_csv), read_csv("./data/exp_10.csv")) %>% 
 
 con_exp_df <- rbind(con_df, exp_df) %>% select(subject_id, arm, week_1:week_8)
 
+colnames(con_exp_df) = c("subject_id", "arm", "1", "2", "3", "4", "5", "6", "7", "8")
+
+con_exp_df <- con_exp_df %>% gather(key = week, value = observation, 3:10)
+
+con_exp_df
+
 ```
 
+### Plot observations for each subject over time
+
+Make spaghetti plot of subject data over time.
+
+```{r}
+
+con_exp_df %>% ggplot(aes(x = week, y = observation, group = subject_id, color = arm)) +
+  geom_line() +
+  ggtitle("Observed Values for Control and Experimental Subjects Over Time") +
+  xlab("Week Number") +
+  ylab("Observed Value") +
+  theme(legend.title = element_blank())
+
+```
+
+This plot demonstrates that the observations for subjects in the experimental arm of the trial increase during the duration of the study and are generally higher than the observations for subjects in the control arm.
