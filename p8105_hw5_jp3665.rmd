@@ -11,13 +11,18 @@ library(tidyverse)
 #install.packages("rvest")
 library(rvest)
 library(httr)
+library(magrittr)
 
 ```
 
 
 ## Washington Post homicide data
 
+This data gathered by the Washington Post contains information about the victim, location, and disposition of over 52,000 homicides that occurred over the past decade in 50 of the largest cities in the U.S.
 
+### Clean Washington Post homicide data
+
+Make data frame of total and unsolved homicides in each city.
 
 ```{r}
 
@@ -25,6 +30,8 @@ homicide_data <- read.csv("https://raw.githubusercontent.com/washingtonpost/data
 
 homicide_data <- homicide_data %>%
   mutate(.keep = "all", city_state = paste(city, state, sep = ", "))
+
+head(homicide_data)
 
 homicide_total <- homicide_data %>%
   group_by(city_state) %>%
@@ -35,20 +42,60 @@ homicide_unsolved <- homicide_data %>%
   group_by(city_state) %>%
   summarize(n_unsolved = n())
 
-homicide_summary <- merge(homicide_total, homicide_unsolved, by = "city_state", all = TRUE)
+homicide_summary <- merge(homicide_total, homicide_unsolved, by = "city_state", all = TRUE) %>% na.omit
 
-baltimore_test <- homicide_summary %>%
-  filter(city_state == "Baltimore, MD") %>%
-  mutate(unsolved = n_unsolved, solved = n_homicides - n_unsolved) %>%
-  select(city_state, unsolved, solved) %>%
-  remove_rownames() %>%
-  column_to_rownames(var = "city_state") %>%
-  as.matrix() %>%
-  prop.test() %>%
-  broom::tidy(baltimore_test) %>%
+homicide_summary
+
+```
+
+### Proportion of homicides that are unsolved test case
+
+Estimate proportion of unsolved homicides for Baltimore, MD as a test case.
+
+```{r}
+
+baltimore_homicide <- homicide_summary %>%
+  filter(city_state == "Baltimore, MD") 
+
+baltimore_test <- prop.test(baltimore_homicide$n_unsolved, baltimore_homicide$n_homicides) %>%
+  broom::tidy() %>%
   select(estimate, conf.low, conf.high)
 
 baltimore_test
+
+```
+
+### Iterate over every city in Washington Post data
+
+Estimate proportion of unsolved homicides for each city in Washington Post homicide data set.
+
+```{r}
+
+homicide_input <- homicide_summary %>% remove_rownames() %>% column_to_rownames(var="city_state")
+
+homicide_test <- map2(homicide_input$n_unsolved, homicide_input$n_homicides, prop.test)
+
+homicide_test <- map(homicide_test, broom::tidy)
+
+homicide_test <- map_dfr(homicide_test, extract, c("estimate", "conf.low", "conf.high"))
+
+homicide_test <- homicide_test %>% 
+  mutate(city_state = homicide_summary$city_state, estimate, conf.low, conf.high) %>%
+  select(city_state, estimate, conf.low, conf.high)
+
+homicide_test
+
+```
+
+```{r}
+
+homicide_test %>% mutate(city_state = fct_reorder(city_state, desc(estimate))) %>% ggplot(aes(x = city_state, y = estimate)) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  geom_point() +
+  ggtitle("Proportion of Unsolved Homicides by City") +
+  xlab("City, State") +
+  ylab("Proportion of Unsolved Homicides")
 
 ```
 
