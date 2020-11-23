@@ -12,6 +12,8 @@ library(tidyverse)
 library(rvest)
 library(httr)
 library(magrittr)
+#insstall.packages("gridExtra")
+library(gridExtra)
 
 ```
 
@@ -143,3 +145,120 @@ con_exp_df %>% ggplot(aes(x = week, y = observation, group = subject_id, color =
 ```
 
 This plot demonstrates that the observations for subjects in the experimental arm of the trial increase during the duration of the study and are generally higher than the observations for subjects in the control arm.
+
+
+## Power simulation
+
+Simulate different sample sizes and effect sizes in a one-sample t-test in order to study statistical power.
+
+### Generate 5000 datasets for one-sample t-test on normal distribution
+
+Sample size = 30
+Standard deviation = 5
+Mean = 0
+
+```{r}
+
+sim_function <- function(n, mu, sigma) {
+  
+  sim_data <-  tibble(
+    x = rnorm(n, mean = mu, sd = sigma)
+  )
+  
+  sim_data %>% 
+    t.test() %>%
+    broom::tidy() %>%
+    select(estimate, p.value)
+  
+}
+
+sim_results_zero <- rerun(5000, sim_function(30, 0, 5)) %>%
+  bind_rows %>%
+  mutate(mean_est = estimate, p_value = p.value, mu = 0, .keep = "none")
+
+```
+
+### Generate simulated datasets for different mean values
+
+Mean = {1:6}
+
+```{r}
+
+sim_loop = vector("list", length = 6)
+
+for (i in 1:6) {
+  
+  sim_loop[[i]] <- rerun(5000, sim_function(30, i, 5)) %>%
+  bind_rows %>%
+  mutate(mean_est = estimate, p_value = p.value, mu = i, .keep = "none")
+  
+}
+
+sim_loop <- bind_rows(sim_loop)
+
+sim_loop <- rbind(sim_loop, sim_results_zero)
+
+```
+
+### Plot proportion null rejected for each mean
+
+Plot proportion of times that the null hypothesis was rejected (p < 0.05) for each mean
+
+```{r}
+
+prop_reject <- sim_loop %>%
+  mutate(reject = as.logical(p_value < 0.05)) %>%
+  group_by(mu) %>%
+  count(reject = (reject == TRUE)) %>%
+  filter(reject == TRUE) %>%
+  mutate(prop = n/5000)
+
+prop_reject %>% ggplot(aes(x = mu, y = prop)) +
+  geom_bar(stat = "identity", fill="steelblue") +
+  theme_minimal() +
+  ggtitle("Proportion of times null hypothesis is rejected") +
+  xlab("Mu") +
+  ylab("Proportion")
+
+
+```
+The null hypothesis was reject more frequently with higher mu values, approaching 100% of the time with mu = 6. 
+
+### Estimated mean vs. mu
+
+Is the sample average of estimated mu across tests for which the null is rejected approximately equal to the true value of mu? 
+
+```{r}
+
+p1 <- sim_loop %>%
+  mutate(reject = as.logical(p_value < 0.05)) %>%
+  group_by(mu) %>%
+  summarize(avg_mean = mean(mean_est)) %>%
+  ggplot(aes(x = mu, y = avg_mean)) +
+  geom_bar(stat = "identity", fill="steelblue") +
+  theme_minimal() +
+  ggtitle("Average estimated mean vs. mu, all") +
+  xlab("Mu") +
+  ylab("Average estimated mean")+
+  geom_text(aes(label = round(avg_mean, digits = 2)))
+
+
+p2 <- sim_loop %>%
+  mutate(reject = as.logical(p_value < 0.05)) %>%
+  group_by(mu) %>%
+  filter(reject == TRUE) %>%
+  summarize(avg_mean = mean(mean_est)) %>%
+  ggplot(aes(x = mu, y = avg_mean)) +
+  geom_bar(stat = "identity", fill="steelblue") +
+  theme_minimal() +
+  ggtitle("Average estimated mean vs. mu, null hypothesis rejected") +
+  xlab("Mu") +
+  ylab("Average estimated mean") +
+  geom_text(aes(label = round(avg_mean, digits = 2)))
+
+
+grid.arrange(p1, p2, ncol = 1, nrow = 2)
+
+
+```
+The average estimated mu across datasets for which the null hypothesis was rejected is not approximately equal to mu because rejecting the null hypothesis requires that the distribution be unlikely (< 0.05) to be drawn from a normal distribution with the given parameters (mu, standard deviation) which, by definition, means that he average estimated mu for datasets for which the null hypothesis was rejected will differ from the defined mu value.
