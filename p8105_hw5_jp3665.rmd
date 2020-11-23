@@ -222,6 +222,7 @@ prop_reject %>% ggplot(aes(x = mu, y = prop)) +
 
 
 ```
+
 The null hypothesis was reject more frequently with higher mu values, approaching 100% of the time with mu = 6. 
 
 ### Estimated mean vs. mu
@@ -261,4 +262,5 @@ grid.arrange(p1, p2, ncol = 1, nrow = 2)
 
 
 ```
+
 The average estimated mu across datasets for which the null hypothesis was rejected is not approximately equal to mu because rejecting the null hypothesis requires that the distribution be unlikely (< 0.05) to be drawn from a normal distribution with the given parameters (mu, standard deviation) which, by definition, means that he average estimated mu for datasets for which the null hypothesis was rejected will differ from the defined mu value.
